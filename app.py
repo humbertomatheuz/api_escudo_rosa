@@ -1,11 +1,13 @@
 from flask import Flask, request, jsonify
 from flask_restful import Resource, Api
 from sqlalchemy.exc import IntegrityError
+from flask_cors import CORS
 import time # Para timestamp
 from models import SessionLocal, Contato, Denuncia, Evento, Informacao, User, create_tables
 
 app = Flask(__name__)
 api = Api(app)
+CORS(app)
 
 # Dependência do banco de dados
 def get_db():
@@ -15,7 +17,6 @@ def get_db():
     finally:
         db.close()
 
-# Inicia o banco de dados na primeira execução
 with app.app_context():
     create_tables()
 
