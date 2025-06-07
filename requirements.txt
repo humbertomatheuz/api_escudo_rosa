@@ -1,3 +1,4 @@
 Flask
 Flask-RESTful
 gunicorn # Servidor WSGI para produção
+SQLAlchemy
