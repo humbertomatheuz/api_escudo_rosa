@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_restful import Resource, Api
 from sqlalchemy.exc import IntegrityError
 from flask_cors import CORS
-import time # Para timestamp
+import time
 from models import SessionLocal, Contato, Denuncia, Evento, Informacao, User, create_tables
 
 app = Flask(__name__)
@@ -31,6 +31,8 @@ class ContatoListResource(Resource):
                 "title": c.title,
                 "descricao": c.descricao,
                 "local": c.local,
+                "telefone": c.telefone,
+                "email": c.email,
                 "created_at": c.created_at
             } for c in contatos
         ])
@@ -46,7 +48,9 @@ class ContatoListResource(Resource):
                 title=data["title"],
                 descricao=data["descricao"],
                 local=data.get("local"),
-                created_at=int(time.time() * 1000) # Timestamp em milissegundos
+                telefone=data.get("telefone"),
+                email=data.get("email"),
+                created_at=int(time.time() * 1000) 
             )
             db.add(new_contato)
             db.commit()
@@ -56,6 +60,8 @@ class ContatoListResource(Resource):
                 "title": new_contato.title,
                 "descricao": new_contato.descricao,
                 "local": new_contato.local,
+                "telefone": new_contato.telefone,
+                "email": new_contato.email,
                 "created_at": new_contato.created_at
             }, 201
         except IntegrityError:
@@ -76,6 +82,8 @@ class ContatoResource(Resource):
             "title": contato.title,
             "descricao": contato.descricao,
             "local": contato.local,
+            "telefone": contato.telefone,
+            "email": contato.email,
             "created_at": contato.created_at
         }
 
@@ -96,6 +104,10 @@ class ContatoResource(Resource):
                 contato.descricao = data["descricao"]
             if "local" in data:
                 contato.local = data["local"]
+            if "telefone" in data:
+                contato.telefone = data["telefone"]
+            if "email" in data:
+                contato.email = data["email"]
             
             db.commit()
             db.refresh(contato)
@@ -104,6 +116,8 @@ class ContatoResource(Resource):
                 "title": contato.title,
                 "descricao": contato.descricao,
                 "local": contato.local,
+                "telefone": contato.telefone,
+                "email": contato.email,
                 "created_at": contato.created_at
             }
         except IntegrityError:
@@ -171,7 +185,6 @@ class DenunciaListResource(Resource):
             db.rollback()
             return {"message": f"Erro ao salvar denúncia: {str(e)}"}, 500
 
-# --- Recursos para Eventos ---
 class EventoListResource(Resource):
     def get(self):
         db = next(get_db())
@@ -182,6 +195,7 @@ class EventoListResource(Resource):
                 "title": e.title,
                 "descricao": e.descricao,
                 "local": e.local,
+                "data": e.data,
                 "created_at": e.created_at
             } for e in eventos
         ])
@@ -189,14 +203,15 @@ class EventoListResource(Resource):
     def post(self):
         db = next(get_db())
         data = request.get_json()
-        if not data or not data.get("title") or not data.get("descricao"):
-            return {"message": "Título e descrição são obrigatórios."}, 400
+        if not data or not data.get("title") or not data.get("descricao") or not data.get("data"):
+            return {"message": "Título, descrição e data do evento são obrigatórios."}, 400
 
         try:
             new_evento = Evento(
                 title=data["title"],
                 descricao=data["descricao"],
                 local=data.get("local"),
+                data=data["data"],
                 created_at=int(time.time() * 1000)
             )
             db.add(new_evento)
@@ -207,6 +222,7 @@ class EventoListResource(Resource):
                 "title": new_evento.title,
                 "descricao": new_evento.descricao,
                 "local": new_evento.local,
+                "data": new_evento.data,
                 "created_at": new_evento.created_at
             }, 201
         except IntegrityError:
@@ -216,7 +232,68 @@ class EventoListResource(Resource):
             db.rollback()
             return {"message": f"Erro ao adicionar evento: {str(e)}"}, 500
 
-# --- Recursos para Informações ---
+# Adicione esta NOVA CLASSE para lidar com operações em um único evento (GET, PUT, DELETE)
+class EventoResource(Resource):
+    def get(self, evento_id):
+        db = next(get_db())
+        evento = db.query(Evento).filter(Evento.id == evento_id).first()
+        if not evento:
+            return {"message": "Evento não encontrado."}, 404
+        return {
+            "id": evento.id,
+            "title": evento.title,
+            "descricao": evento.descricao,
+            "local": evento.local,
+            "data": evento.data,
+            "created_at": evento.created_at
+        }
+
+    def put(self, evento_id):
+        db = next(get_db())
+        evento = db.query(Evento).filter(Evento.id == evento_id).first()
+        if not evento:
+            return {"message": "Evento não encontrado."}, 404
+
+        data = request.get_json()
+        if not data:
+            return {"message": "Corpo da requisição vazio."}, 400
+
+        try:
+            if "title" in data:
+                evento.title = data["title"]
+            if "descricao" in data:
+                evento.descricao = data["descricao"]
+            if "local" in data:
+                evento.local = data["local"]
+            if "data" in data:
+                evento.data = data["data"] 
+            
+            db.commit()
+            db.refresh(evento)
+            return {
+                "id": evento.id,
+                "title": evento.title,
+                "descricao": evento.descricao,
+                "local": evento.local,
+                "data": evento.data,
+                "created_at": evento.created_at
+            }
+        except IntegrityError:
+            db.rollback()
+            return {"message": "Já existe um evento com este título."}, 409
+        except Exception as e:
+            db.rollback()
+            return {"message": f"Erro ao atualizar evento: {str(e)}"}, 500
+
+    def delete(self, evento_id):
+        db = next(get_db())
+        evento = db.query(Evento).filter(Evento.id == evento_id).first()
+        if not evento:
+            return {"message": "Evento não encontrado."}, 404
+        
+        db.delete(evento)
+        db.commit()
+        return {"message": "Evento deletado com sucesso."}, 204 # 204 No Content para deleção bem-sucedida
 class InformacaoListResource(Resource):
     def get(self):
         db = next(get_db())
@@ -226,7 +303,6 @@ class InformacaoListResource(Resource):
                 "id": i.id,
                 "title": i.title,
                 "descricao": i.descricao,
-                "local": i.local,
                 "created_at": i.created_at
             } for i in informacoes
         ])
@@ -241,7 +317,6 @@ class InformacaoListResource(Resource):
             new_informacao = Informacao(
                 title=data["title"],
                 descricao=data["descricao"],
-                local=data.get("local"),
                 created_at=int(time.time() * 1000)
             )
             db.add(new_informacao)
@@ -251,7 +326,6 @@ class InformacaoListResource(Resource):
                 "id": new_informacao.id,
                 "title": new_informacao.title,
                 "descricao": new_informacao.descricao,
-                "local": new_informacao.local,
                 "created_at": new_informacao.created_at
             }, 201
         except IntegrityError:
@@ -266,8 +340,8 @@ class UserRegisterResource(Resource):
     def post(self):
         db = next(get_db())
         data = request.get_json()
-        if not data or not all(k in data for k in ["username", "password", "name", "avatarColor"]):
-            return {"message": "Todos os campos (username, password, name, avatarColor) são obrigatórios."}, 400
+        if not data or not all(k in data for k in ["username", "password", "name", "cargo"]):
+            return {"message": "Todos os campos (username, password, name, cargo) são obrigatórios."}, 400
 
         try:
             existing_user = db.query(User).filter(User.username == data["username"]).first()
@@ -278,7 +352,7 @@ class UserRegisterResource(Resource):
                 username=data["username"],
                 password=data["password"], # Em produção, use hashing de senhas (ex: bcrypt)
                 name=data["name"],
-                avatarColor=data["avatarColor"]
+                cargo=data["cargo"]
             )
             db.add(new_user)
             db.commit()
@@ -287,7 +361,7 @@ class UserRegisterResource(Resource):
                 "id": new_user.id,
                 "username": new_user.username,
                 "name": new_user.name,
-                "avatarColor": new_user.avatarColor
+                "cargo": new_user.cargo
             }, 201
         except Exception as e:
             db.rollback()
@@ -310,7 +384,7 @@ class UserLoginResource(Resource):
                 "id": user.id,
                 "username": user.username,
                 "name": user.name,
-                "avatarColor": user.avatarColor
+                "cargo": user.cargo
             }, 200
         return {"message": "Credenciais inválidas."}, 401
 
@@ -321,6 +395,7 @@ api.add_resource(ContatoResource, '/api/contatos/<int:contato_id>')
 api.add_resource(DenunciaListResource, '/api/denuncias')
 
 api.add_resource(EventoListResource, '/api/eventos')
+api.add_resource(EventoResource, '/api/eventos/<int:evento_id>') 
 
 api.add_resource(InformacaoListResource, '/api/informacoes')
 
